@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <pthread.h>
+#include <sched.h>
 #include "shared_data.h"
 
 /*
@@ -11,6 +12,10 @@
 
     IHM console avec couleurs ANSI.
     Aucune bibliotheque externe requise.
+
+    Priorite SCHED_FIFO : 40 (la plus basse du systeme)
+    L'affichage n'est pas critique : il peut attendre que
+    les threads de securite aient fini leur travail.
 */
 
 /* ===================================== */
@@ -202,6 +207,37 @@ static void draw_ascii_foot(float tilt)
 void *display_ui_task(void *arg)
 {
     (void)arg;
+
+    /* ================================================ */
+    /* Configuration SCHED_FIFO - Priorite 40           */
+    /* ================================================ */
+    /* L'IHM a la priorite la plus basse : l'affichage   */
+    /* peut etre retarde sans impact sur la securite.    */
+    /* Tous les threads critiques passent avant.         */
+    /* ================================================ */
+
+    struct sched_param param;
+    param.sched_priority = 40;  /* Priorite IHM : 40 (min) */
+
+    int ret = pthread_setschedparam(
+        pthread_self(),    /* Thread courant */
+        SCHED_FIFO,        /* Politique temps-reel FIFO */
+        &param             /* Parametres (priorite) */
+    );
+
+    if (ret != 0)
+    {
+        fprintf(stderr,
+                "[display_ui] WARN: pthread_setschedparam echoue: %s\n",
+                strerror(ret));
+        fprintf(stderr,
+                "[display_ui] Lancez avec sudo pour les priorites RT.\n");
+    }
+    else
+    {
+        printf("[display_ui] SCHED_FIFO active, priorite = %d\n",
+               param.sched_priority);
+    }
 
     /* Cacher le curseur */
     printf(HIDE_CURSOR);

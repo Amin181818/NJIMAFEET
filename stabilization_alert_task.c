@@ -1,12 +1,14 @@
 #include <stdio.h>
 #include <unistd.h>
+#include <string.h>
 #include <pthread.h>
+#include <sched.h>
 
 #include "shared_data.h"
 
 /*
-    stabilization_alert.c
-    ---------------------
+    stabilization_alert_task.c
+    -------------------------
     Tache critique du systeme SafeFeet.
 
     Role :
@@ -14,7 +16,7 @@
     - Commander les actionneurs
     - Reagir immediatement aux situations dangereuses
 
-    Priorite : 55 (SCHED_FIFO) — definie dans main.c
+    Priorite SCHED_FIFO : 70
 */
 
 static void sleep_ms(int ms)
@@ -25,6 +27,37 @@ static void sleep_ms(int ms)
 void *stabilization_alert_task(void *arg)
 {
     (void)arg;
+
+    /* ================================================ */
+    /* Configuration SCHED_FIFO - Priorite 70           */
+    /* ================================================ */
+    /* La stabilisation doit reagir vite apres la        */
+    /* detection de chute (80) pour commander les         */
+    /* actionneurs sans delai.                           */
+    /* ================================================ */
+
+    struct sched_param param;
+    param.sched_priority = 70;  /* Priorite stabilisation : 70 */
+
+    int ret = pthread_setschedparam(
+        pthread_self(),    /* Thread courant */
+        SCHED_FIFO,        /* Politique temps-reel FIFO */
+        &param             /* Parametres (priorite) */
+    );
+
+    if (ret != 0)
+    {
+        fprintf(stderr,
+                "[stabilization] WARN: pthread_setschedparam echoue: %s\n",
+                strerror(ret));
+        fprintf(stderr,
+                "[stabilization] Lancez avec sudo pour les priorites RT.\n");
+    }
+    else
+    {
+        printf("[stabilization] SCHED_FIFO active, priorite = %d\n",
+               param.sched_priority);
+    }
 
     /* Boucle principale */
 

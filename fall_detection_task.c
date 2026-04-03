@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <unistd.h>
+#include <string.h>
 #include <math.h>
 #include <pthread.h>
+#include <sched.h>
 #include "shared_data.h"
 
 /*
@@ -11,11 +13,46 @@
     Cerveau securite du systeme.
     Analyse les donnees capteurs et terrain pour determiner
     le niveau de danger : NORMAL, WARNING, FALL_RISK, FALL_IMMINENT.
+
+    Priorite SCHED_FIFO : 80 (la plus elevee du systeme)
+    Ce thread est le plus critique : il decide du niveau de danger.
 */
 
 void *fall_detection_task(void *arg)
 {
     (void)arg;
+
+    /* ================================================ */
+    /* Configuration SCHED_FIFO - Priorite 80           */
+    /* ================================================ */
+    /* La detection de chute a la priorite la plus       */
+    /* elevee du systeme. Elle preempte tous les autres  */
+    /* threads pour garantir une reaction immediate      */
+    /* en cas de danger.                                 */
+    /* ================================================ */
+
+    struct sched_param param;
+    param.sched_priority = 80;  /* Priorite detection chute : 80 (max) */
+
+    int ret = pthread_setschedparam(
+        pthread_self(),    /* Thread courant */
+        SCHED_FIFO,        /* Politique temps-reel FIFO */
+        &param             /* Parametres (priorite) */
+    );
+
+    if (ret != 0)
+    {
+        fprintf(stderr,
+                "[fall_detection] WARN: pthread_setschedparam echoue: %s\n",
+                strerror(ret));
+        fprintf(stderr,
+                "[fall_detection] Lancez avec sudo pour les priorites RT.\n");
+    }
+    else
+    {
+        printf("[fall_detection] SCHED_FIFO active, priorite = %d\n",
+               param.sched_priority);
+    }
 
     while (system_running)
     {

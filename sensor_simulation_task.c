@@ -2,26 +2,30 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <time.h>
+#include <string.h>
+#include <errno.h>
 #include <pthread.h>
+#include <sched.h>
 #include "shared_data.h"
 
 /*
     SafeFeet by Njima
-    sensor_simulation.c
+    sensor_simulation_task.c
 
-    This thread simulates the data coming from:
-    - accelerometer
+    Simulation des donnees capteurs :
+    - accelerometre
     - gyroscope
-    - tilt / inclination
-    - left/right foot pressure
-    - depth sensor
+    - inclinaison (tilt)
+    - pression pied gauche / droit
+    - capteur de profondeur
 
-    Simulated scenarios:
-    0 -> normal walking
-    1 -> slippery surface
-    2 -> obstacle ahead
-    3 -> pothole / road defect
-    4 -> loss of balance
+    Priorite SCHED_FIFO : 50
+    Scenarios simules :
+    0 -> marche normale
+    1 -> surface glissante
+    2 -> obstacle
+    3 -> nid de poule
+    4 -> perte d'equilibre
 */
 
 static float random_float(float min, float max) {
@@ -103,6 +107,39 @@ static void generate_sensor_data(SensorData *data, int scenario) {
 
 void* sensor_simulation_task(void* arg) {
     (void)arg;
+
+    /* ================================================ */
+    /* Configuration SCHED_FIFO - Priorite 50           */
+    /* ================================================ */
+    /* pthread_setschedparam permet de modifier la       */
+    /* politique d'ordonnancement du thread courant.     */
+    /* SCHED_FIFO = First In First Out temps-reel :      */
+    /* le thread s'execute tant qu'il n'est pas bloque   */
+    /* ou preempte par un thread de priorite superieure. */
+    /* ================================================ */
+
+    struct sched_param param;
+    param.sched_priority = 50;  /* Priorite capteurs : 50 */
+
+    int ret = pthread_setschedparam(
+        pthread_self(),    /* Thread courant */
+        SCHED_FIFO,        /* Politique temps-reel FIFO */
+        &param             /* Parametres (priorite) */
+    );
+
+    if (ret != 0)
+    {
+        fprintf(stderr,
+                "[sensor_simulation] WARN: pthread_setschedparam echoue: %s\n",
+                strerror(ret));
+        fprintf(stderr,
+                "[sensor_simulation] Lancez avec sudo pour les priorites RT.\n");
+    }
+    else
+    {
+        printf("[sensor_simulation] SCHED_FIFO active, priorite = %d\n",
+               param.sched_priority);
+    }
 
     srand((unsigned int)time(NULL));
 

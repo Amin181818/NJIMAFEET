@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <unistd.h>
+#include <string.h>
 #include <math.h>
 #include <pthread.h>
+#include <sched.h>
 #include "shared_data.h"
 
 /*
@@ -11,11 +13,44 @@
     Simule la cartographie de l'environnement a partir des donnees capteurs.
     Analyse les donnees des cameras et du capteur de profondeur
     pour detecter : trou, obstacle, surface glissante, pente.
+
+    Priorite SCHED_FIFO : 60
 */
 
 void *mapping_task(void *arg)
 {
     (void)arg;
+
+    /* ================================================ */
+    /* Configuration SCHED_FIFO - Priorite 60           */
+    /* ================================================ */
+    /* Le mapping a une priorite moyenne : il doit       */
+    /* traiter les donnees terrain avant l'affichage     */
+    /* mais apres la detection de chute.                 */
+    /* ================================================ */
+
+    struct sched_param param;
+    param.sched_priority = 60;  /* Priorite mapping : 60 */
+
+    int ret = pthread_setschedparam(
+        pthread_self(),    /* Thread courant */
+        SCHED_FIFO,        /* Politique temps-reel FIFO */
+        &param             /* Parametres (priorite) */
+    );
+
+    if (ret != 0)
+    {
+        fprintf(stderr,
+                "[mapping] WARN: pthread_setschedparam echoue: %s\n",
+                strerror(ret));
+        fprintf(stderr,
+                "[mapping] Lancez avec sudo pour les priorites RT.\n");
+    }
+    else
+    {
+        printf("[mapping] SCHED_FIFO active, priorite = %d\n",
+               param.sched_priority);
+    }
 
     while (system_running)
     {
