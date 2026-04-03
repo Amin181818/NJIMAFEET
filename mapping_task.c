@@ -115,7 +115,7 @@ void *mapping_task(void *arg)
 
         pthread_mutex_unlock(&data_mutex);
 
-        usleep(50000); /* 50 ms — rapide pour montrer l'ordonnancement */
+        usleep(50000); /* 50 ms — priorite 60 : rapide */
     }
 
     return NULL;

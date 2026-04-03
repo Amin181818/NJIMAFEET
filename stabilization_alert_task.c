@@ -157,7 +157,7 @@ void *stabilization_alert_task(void *arg)
 
 
         /* Fréquence de la tâche */
-        usleep(50000); /* 50 ms — rapide pour montrer l'ordonnancement */
+        usleep(35000); /* 35 ms — priorite 70 : tres rapide */
     }
 
     return NULL;

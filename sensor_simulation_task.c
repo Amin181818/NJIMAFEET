@@ -160,7 +160,7 @@ void* sensor_simulation_task(void* arg) {
 
         counter++;
 
-        usleep(50000); /* 50 ms — rapide pour montrer l'ordonnancement */
+        usleep(80000); /* 80 ms — priorite 50 : moyen */
     }
 
     pthread_exit(NULL);

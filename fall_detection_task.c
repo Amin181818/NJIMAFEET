@@ -143,7 +143,7 @@ void *fall_detection_task(void *arg)
         thread_stats[THREAD_FALL_DET].exec_count++;
         pthread_mutex_unlock(&data_mutex);
 
-        usleep(50000); /* 50 ms — rapide pour montrer l'ordonnancement */
+        usleep(20000); /* 20 ms — priorite 80 : le plus rapide */
     }
 
     return NULL;
