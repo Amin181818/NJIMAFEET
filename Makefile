@@ -1,6 +1,6 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -pthread
-LDFLAGS = -pthread -lm
+CFLAGS = -Wall -Wextra -pthread $(shell sdl2-config --cflags)
+LDFLAGS = -pthread -lm $(shell sdl2-config --libs) -lSDL2_ttf
 
 TARGET = safefeet
 
