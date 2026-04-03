@@ -1,5 +1,5 @@
 Répartition en 5 en C
-1. Personne 1 — Génération des données simulées
+1. Jonathan — Génération des données simulées
 Fichier conseillé
 
 sensor_simulation.c
@@ -42,7 +42,7 @@ Priorité
 
 45
 
-2. Personne 2 — Cartographie du terrain
+2. Thomy — Cartographie du terrain
 Fichier conseillé
 
 mapping.c
@@ -80,7 +80,7 @@ Priorité
 
 40
 
-3. Personne 3 — Détection de chute
+3. Amin — Détection de chute
 Fichier conseillé
 
 fall_detection.c
@@ -121,7 +121,7 @@ Priorité
 
 60
 
-4. Personne 4 — Stabilisation et alertes
+4. Jolyon — Stabilisation et alertes
 Fichier conseillé
 
 stabilization_alert.c
@@ -155,7 +155,7 @@ Priorité
 
 55
 
-5. Personne 5 — IHM en C
+5. Dorian — IHM en C
 Fichier conseillé
 
 display_ui.c
@@ -282,7 +282,7 @@ extern pthread_mutex_t data_mutex;
 #endif
 Exemple d’IHM en C
 
-La personne 5 peut afficher quelque chose comme :
+La Dorian peut afficher quelque chose comme :
 
 ==============================
      SAFEFEET BY NJIMA
@@ -312,43 +312,43 @@ Vibration    : 2
 Buzzer       : OFF
 LED          : ORANGE
 Comment chacun travaille
-Personne 1
+Jonathan
 
 Travaille surtout sur :
 
 rand()
 scénarios
 mise à jour de sensor_data
-Personne 2
+Thomy
 
 Travaille sur :
 
 règles de terrain
 mise à jour de map_data
-Personne 3
+Amin
 
 Travaille sur :
 
 conditions et seuils
 mise à jour de fall_state
-Personne 4
+Jolyon
 
 Travaille sur :
 
 lecture de fall_state
 mise à jour de actuator_state
-Personne 5
+Dorian
 
 Travaille sur :
 
 lecture de toutes les structures
 affichage temps réel
 Ordre de développement conseillé
-personne 1 fait les données
-personne 2 fait le terrain
-personne 3 fait la logique de chute
-personne 4 fait les réactions
-personne 5 branche l’IHM
+Jonathan fait les données
+Thomy fait le terrain
+Amin fait la logique de chute
+Jolyon fait les réactions
+Dorian branche l’IHM
 Pour l’IHM en C
 
 Je te conseille vraiment :
