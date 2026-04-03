@@ -32,7 +32,7 @@ void *stabilization_alert_task(void *arg)
     /* ================================================ */
 
     struct sched_param param;
-    param.sched_priority = 70;  /* Priorite stabilisation : 70 */
+    param.sched_priority = 60;  /* Priorite stabilisation : 70 */
 
     int ret = pthread_setschedparam(
         pthread_self(),    /* Thread courant */
