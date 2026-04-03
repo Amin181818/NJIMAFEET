@@ -1,1 +1,129 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <time.h>
+#include <pthread.h>
+#include "shared_data.h"
 
+/*
+    SafeFeet by Njima
+    sensor_simulation.c
+
+    This thread simulates the data coming from:
+    - accelerometer
+    - gyroscope
+    - tilt / inclination
+    - left/right foot pressure
+    - depth sensor
+
+    Simulated scenarios:
+    0 -> normal walking
+    1 -> slippery surface
+    2 -> obstacle ahead
+    3 -> pothole / road defect
+    4 -> loss of balance
+*/
+
+static float random_float(float min, float max) {
+    return min + ((float)rand() / (float)RAND_MAX) * (max - min);
+}
+
+static void generate_normal_walking(SensorData *data) {
+    data->accel = random_float(0.8f, 1.5f);
+    data->tilt = random_float(-5.0f, 5.0f);
+    data->gyro = random_float(0.0f, 2.0f);
+    data->pressure_left = random_float(40.0f, 60.0f);
+    data->pressure_right = random_float(40.0f, 60.0f);
+    data->depth = random_float(0.00f, 0.05f);
+    data->mode_scenario = 0;
+}
+
+static void generate_slippery_surface(SensorData *data) {
+    data->accel = random_float(1.5f, 2.5f);
+    data->tilt = random_float(-12.0f, 12.0f);
+    data->gyro = random_float(2.0f, 5.0f);
+    data->pressure_left = random_float(20.0f, 45.0f);
+    data->pressure_right = random_float(20.0f, 45.0f);
+    data->depth = random_float(0.00f, 0.03f);
+    data->mode_scenario = 1;
+}
+
+static void generate_obstacle(SensorData *data) {
+    data->accel = random_float(1.8f, 3.0f);
+    data->tilt = random_float(8.0f, 18.0f);
+    data->gyro = random_float(3.0f, 6.0f);
+    data->pressure_left = random_float(30.0f, 65.0f);
+    data->pressure_right = random_float(30.0f, 65.0f);
+    data->depth = random_float(0.08f, 0.20f);
+    data->mode_scenario = 2;
+}
+
+static void generate_pothole(SensorData *data) {
+    data->accel = random_float(2.0f, 3.5f);
+    data->tilt = random_float(10.0f, 20.0f);
+    data->gyro = random_float(4.0f, 7.0f);
+    data->pressure_left = random_float(15.0f, 40.0f);
+    data->pressure_right = random_float(50.0f, 80.0f);
+    data->depth = random_float(0.20f, 0.45f);
+    data->mode_scenario = 3;
+}
+
+static void generate_loss_of_balance(SensorData *data) {
+    data->accel = random_float(2.5f, 4.5f);
+    data->tilt = random_float(15.0f, 30.0f);
+    data->gyro = random_float(5.0f, 10.0f);
+    data->pressure_left = random_float(10.0f, 30.0f);
+    data->pressure_right = random_float(60.0f, 90.0f);
+    data->depth = random_float(0.00f, 0.10f);
+    data->mode_scenario = 4;
+}
+
+static void generate_sensor_data(SensorData *data, int scenario) {
+    switch (scenario) {
+        case 0:
+            generate_normal_walking(data);
+            break;
+        case 1:
+            generate_slippery_surface(data);
+            break;
+        case 2:
+            generate_obstacle(data);
+            break;
+        case 3:
+            generate_pothole(data);
+            break;
+        case 4:
+            generate_loss_of_balance(data);
+            break;
+        default:
+            generate_normal_walking(data);
+            break;
+    }
+}
+
+void* sensor_simulation_task(void* arg) {
+    (void)arg;
+
+    srand((unsigned int)time(NULL));
+
+    int scenario = 0;
+    int counter = 0;
+
+    while (program_running) {
+
+        /* change scenario every 8 iterations */
+        if (counter % 8 == 0) {
+            scenario = rand() % 5;
+        }
+
+        pthread_mutex_lock(&data_mutex);
+        generate_sensor_data(&sensor_data, scenario);
+        pthread_mutex_unlock(&data_mutex);
+
+        counter++;
+
+        usleep(500000); /* 500 ms */
+    }
+
+    pthread_exit(NULL);
+}
