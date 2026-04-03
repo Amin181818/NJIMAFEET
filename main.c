@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <signal.h>
 #include <pthread.h>
+#include <sched.h>
 #include "shared_data.h"
 
 /*
@@ -10,7 +12,26 @@
 
     Point d'entree du systeme.
     Initialise les donnees partagees, cree les 5 threads
+    avec ordonnancement SCHED_FIFO et priorites explicites,
     et attend leur terminaison.
+
+    Politique d'ordonnancement : SCHED_FIFO
+    ----------------------------------------
+    SCHED_FIFO est le plus adapte pour un systeme de securite
+    temps-reel : un thread de haute priorite preempte immediatement
+    les threads de priorite inferieure, sans attendre de time-slice.
+    Cela garantit que la detection de chute (priorite 60) reagit
+    avant la stabilisation (55), les capteurs (45), la cartographie
+    (40) et enfin l'IHM (10).
+
+    Priorites SCHED_FIFO (echelle Linux : 1 - 99) :
+      fall_detection      : 60  (reaction critique)
+      stabilization_alert : 55  (commande actionneurs)
+      sensor_simulation   : 45  (acquisition donnees)
+      mapping             : 40  (traitement terrain)
+      display_ui          : 10  (affichage non critique)
+
+    Note : SCHED_FIFO necessite les privileges root (sudo).
 */
 
 /* ===================================== */
@@ -37,6 +58,51 @@ static void signal_handler(int sig)
 }
 
 /* ===================================== */
+/* Configuration d'un thread SCHED_FIFO  */
+/* ===================================== */
+
+typedef struct {
+    void *(*func)(void *);
+    int   priority;
+    const char *name;
+} ThreadConfig;
+
+/*
+ * Cree un thread avec politique SCHED_FIFO et priorite explicite.
+ * Retourne 0 en succes, -1 en echec.
+ */
+static int create_rt_thread(pthread_t *tid, const ThreadConfig *cfg)
+{
+    pthread_attr_t attr;
+    struct sched_param param;
+    int ret;
+
+    pthread_attr_init(&attr);
+
+    /* Politique temps-reel SCHED_FIFO */
+    ret = pthread_attr_setschedpolicy(&attr, SCHED_FIFO);
+    if (ret != 0)
+    {
+        fprintf(stderr, "[WARN] SCHED_FIFO indisponible pour %s (%s)\n",
+                cfg->name, strerror(ret));
+        /* Fallback : politique par defaut */
+        pthread_attr_setschedpolicy(&attr, SCHED_OTHER);
+    }
+
+    /* Priorite explicite (ignore la priorite heritee du parent) */
+    pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED);
+
+    param.sched_priority = cfg->priority;
+    pthread_attr_setschedparam(&attr, &param);
+
+    ret = pthread_create(tid, &attr, cfg->func, NULL);
+
+    pthread_attr_destroy(&attr);
+    return ret;
+}
+
+
+/* ===================================== */
 /* Main                                  */
 /* ===================================== */
 
@@ -44,49 +110,44 @@ int main(void)
 {
     pthread_t threads[NB_THREADS];
 
+    /*
+     * Table de configuration des threads.
+     * Ordre de definition : du plus prioritaire au moins prioritaire.
+     * Politique : SCHED_FIFO (preemption stricte par priorite).
+     */
+    ThreadConfig configs[NB_THREADS] = {
+        { fall_detection_task,      60, "fall_detection"      },
+        { stabilization_alert_task, 55, "stabilization_alert" },
+        { sensor_simulation_task,   45, "sensor_simulation"   },
+        { mapping_task,             40, "mapping"             },
+        { display_ui_task,          10, "display_ui"          },
+    };
+
     /* Installation du handler pour Ctrl+C */
     signal(SIGINT, signal_handler);
 
     printf("====================================================\n");
     printf("         SAFEFEET BY NJIMA - Demarrage...\n");
+    printf("====================================================\n");
+    printf(" Ordonnancement : SCHED_FIFO\n");
+    printf(" (sudo requis pour les priorites temps-reel)\n");
     printf("====================================================\n\n");
 
-    /* Creation des 5 threads */
-
-    if (pthread_create(&threads[0], NULL, sensor_simulation_task, NULL) != 0)
+    /* Creation des threads avec leurs priorites */
+    for (int i = 0; i < NB_THREADS; i++)
     {
-        perror("Erreur creation thread sensor_simulation");
-        return EXIT_FAILURE;
+        if (create_rt_thread(&threads[i], &configs[i]) != 0)
+        {
+            fprintf(stderr, "Erreur creation thread %s\n", configs[i].name);
+            system_running = 0;
+            /* Attendre les threads deja lances */
+            for (int j = 0; j < i; j++)
+                pthread_join(threads[j], NULL);
+            return EXIT_FAILURE;
+        }
+        printf("[OK] %-25s priorite SCHED_FIFO = %d\n",
+               configs[i].name, configs[i].priority);
     }
-    printf("[OK] Thread sensor_simulation demarre\n");
-
-    if (pthread_create(&threads[1], NULL, mapping_task, NULL) != 0)
-    {
-        perror("Erreur creation thread mapping");
-        return EXIT_FAILURE;
-    }
-    printf("[OK] Thread mapping demarre\n");
-
-    if (pthread_create(&threads[2], NULL, fall_detection_task, NULL) != 0)
-    {
-        perror("Erreur creation thread fall_detection");
-        return EXIT_FAILURE;
-    }
-    printf("[OK] Thread fall_detection demarre\n");
-
-    if (pthread_create(&threads[3], NULL, stabilization_alert_task, NULL) != 0)
-    {
-        perror("Erreur creation thread stabilization_alert");
-        return EXIT_FAILURE;
-    }
-    printf("[OK] Thread stabilization_alert demarre\n");
-
-    if (pthread_create(&threads[4], NULL, display_ui_task, NULL) != 0)
-    {
-        perror("Erreur creation thread display_ui");
-        return EXIT_FAILURE;
-    }
-    printf("[OK] Thread display_ui demarre\n");
 
     printf("\nSysteme en cours... Appuyez sur Ctrl+C pour arreter.\n\n");
 

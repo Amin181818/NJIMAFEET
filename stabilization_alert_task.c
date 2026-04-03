@@ -1,57 +1,30 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <pthread.h>
-#include <sched.h>
-#include <string.h>
-#include <errno.h>
 
 #include "shared_data.h"
 
 /*
     stabilization_alert.c
     ---------------------
-    Tâche critique du système SafeFeet.
+    Tache critique du systeme SafeFeet.
 
-    Rôle :
-    - Lire l'état du système (fall_state)
+    Role :
+    - Lire l'etat du systeme (fall_state)
     - Commander les actionneurs
-    - Réagir immédiatement aux situations dangereuses
-*/
+    - Reagir immediatement aux situations dangereuses
 
-/* =============================== */
-/* Fonction utilitaire temporisation */
-/* =============================== */
+    Priorite : 55 (SCHED_FIFO) — definie dans main.c
+*/
 
 static void sleep_ms(int ms)
 {
     usleep(ms * 1000);
 }
 
-
-/* =============================== */
-/* Thread Stabilisation / Alertes */
-/* =============================== */
-
 void *stabilization_alert_task(void *arg)
 {
     (void)arg;
-
-    /* Configuration priorité temps réel */
-
-    struct sched_param param;
-    param.sched_priority = 60;
-
-    int ret = pthread_setschedparam(pthread_self(), SCHED_FIFO, &param);
-
-    if (ret != 0)
-    {
-        fprintf(stderr,
-                "Warning: impossible d'activer SCHED_FIFO (%s)\n",
-                strerror(ret));
-        fprintf(stderr,
-                "Essayez de lancer le programme avec sudo.\n");
-    }
-
 
     /* Boucle principale */
 
