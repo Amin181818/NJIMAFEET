@@ -32,7 +32,7 @@ void *fall_detection_task(void *arg)
     /* ================================================ */
 
     struct sched_param param;
-    param.sched_priority = 80;  /* Priorite detection chute : 80 (max) */
+    param.sched_priority = 90;
 
     int ret = pthread_setschedparam(
         pthread_self(),    /* Thread courant */
