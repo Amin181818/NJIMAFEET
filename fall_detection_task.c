@@ -1,156 +1,112 @@
-#ifndef SHARED_DATA_H
-#define SHARED_DATA_H
-
+#include <stdio.h>
+#include <unistd.h>
+#include <math.h>
 #include <pthread.h>
+#include "shared_data.h"
 
-/* ===================================== */
-/* CONSTANTES DU PROJET SAFEFEET         */
-/* ===================================== */
+/*
+    SafeFeet by Njima
+    fall_detection_task.c
 
-#define NB_THREADS 5
+    Cerveau securite du systeme.
+    Analyse les donnees capteurs et terrain pour determiner
+    le niveau de danger : NORMAL, WARNING, FALL_RISK, FALL_IMMINENT.
+*/
 
-/* Scénarios de simulation
-   Utilisés par : sensor_simulation.c et mapping.c */
-#define SCENARIO_NORMAL     0
-#define SCENARIO_HOLE       1
-#define SCENARIO_OBSTACLE   2
-#define SCENARIO_SLIPPERY   3
-#define SCENARIO_SLOPE      4
-#define SCENARIO_COMBINED   5
+void *fall_detection_task(void *arg)
+{
+    (void)arg;
 
+    while (system_running)
+    {
+        SensorData local_sensor;
+        MapData local_map;
 
-/* Etats LED
-   Utilisés par : stabilization_alert.c et display_ui.c */
-#define LED_OFF     0
-#define LED_GREEN   1
-#define LED_ORANGE  2
-#define LED_RED     3
+        /* Lecture des donnees partagees */
+        pthread_mutex_lock(&data_mutex);
+        local_sensor = sensor_data;
+        local_map = map_data;
+        pthread_mutex_unlock(&data_mutex);
 
+        /* Score de danger (plus c'est haut, plus c'est grave) */
+        int danger_score = 0;
 
-/* ===================================== */
-/* ETAT GLOBAL DU SYSTEME                */
-/* ===================================== */
+        /* --- Analyse des capteurs corporels --- */
 
-/* Utilisé par :
-   - fall_detection.c
-   - stabilization_alert.c
-   - display_ui.c */
+        /* Forte acceleration = mouvement brusque */
+        if (local_sensor.accel > 3.0f)
+            danger_score += 3;
+        else if (local_sensor.accel > 2.0f)
+            danger_score += 1;
 
-typedef enum {
-    STATE_NORMAL = 0,
-    STATE_WARNING,
-    STATE_FALL_RISK,
-    STATE_FALL_IMMINENT
-} FallState;
+        /* Forte inclinaison = desequilibre */
+        float abs_tilt = fabsf(local_sensor.tilt);
+        if (abs_tilt > 20.0f)
+            danger_score += 3;
+        else if (abs_tilt > 12.0f)
+            danger_score += 2;
+        else if (abs_tilt > 8.0f)
+            danger_score += 1;
 
+        /* Forte rotation = instabilite */
+        if (local_sensor.gyro > 6.0f)
+            danger_score += 3;
+        else if (local_sensor.gyro > 4.0f)
+            danger_score += 2;
+        else if (local_sensor.gyro > 2.5f)
+            danger_score += 1;
 
-/* ===================================== */
-/* DONNEES CAPTEURS (simulation utilisateur)
-   ECRIT PAR : sensor_simulation.c
-   LU PAR : mapping.c, fall_detection.c, display_ui.c
-===================================== */
+        /* Desequilibre de pression entre les pieds */
+        float pressure_diff = fabsf(local_sensor.pressure_left - local_sensor.pressure_right);
+        if (pressure_diff > 40.0f)
+            danger_score += 3;
+        else if (pressure_diff > 25.0f)
+            danger_score += 2;
+        else if (pressure_diff > 15.0f)
+            danger_score += 1;
 
-typedef struct {
+        /* Pression totale faible = pied qui decolle */
+        float total_pressure = local_sensor.pressure_left + local_sensor.pressure_right;
+        if (total_pressure < 40.0f)
+            danger_score += 2;
 
-    float accel;          /* acceleration globale */
-    float tilt;           /* inclinaison utilisateur */
-    float gyro;           /* rotation */
-    float pressure_left;  /* pression pied gauche */
-    float pressure_right; /* pression pied droit */
+        /* --- Analyse du terrain --- */
 
-    float depth;          /* profondeur sol (capteur profondeur) */
+        if (local_map.hole_detected)
+            danger_score += 3;
 
-    int mode_scenario;    /* scénario de simulation */
+        if (local_map.obstacle_detected && local_map.obstacle_distance < 0.5f)
+            danger_score += 2;
+        else if (local_map.obstacle_detected)
+            danger_score += 1;
 
-} SensorData;
+        if (local_map.slippery_surface)
+            danger_score += 2;
 
+        if (local_map.terrain_slope > 15.0f)
+            danger_score += 2;
+        else if (local_map.terrain_slope > 10.0f)
+            danger_score += 1;
 
-/* ===================================== */
-/* CARTOGRAPHIE DU TERRAIN
-   ECRIT PAR : mapping.c
-   LU PAR : fall_detection.c et display_ui.c
-===================================== */
+        /* --- Decision finale --- */
+        FallState new_state;
 
-typedef struct {
+        if (danger_score >= 10)
+            new_state = STATE_FALL_IMMINENT;
+        else if (danger_score >= 6)
+            new_state = STATE_FALL_RISK;
+        else if (danger_score >= 3)
+            new_state = STATE_WARNING;
+        else
+            new_state = STATE_NORMAL;
 
-    int hole_detected;       /* trou dans la chaussée */
-    int obstacle_detected;   /* obstacle détecté */
+        /* Ecriture de l'etat */
+        pthread_mutex_lock(&data_mutex);
+        fall_state = new_state;
+        pthread_mutex_unlock(&data_mutex);
 
-    int slippery_surface;    /* surface glissante */
+        usleep(200000); /* 200 ms */
+    }
 
-    float terrain_slope;     /* pente du terrain */
-
-    float obstacle_distance; /* distance obstacle */
-
-    int terrain_risk_level;  /* niveau global de risque terrain */
-
-} MapData;
-
-
-/* ===================================== */
-/* ACTIONNEURS DU SYSTEME
-   ECRIT PAR : stabilization_alert.c
-   LU PAR : display_ui.c
-===================================== */
-
-typedef struct {
-
-    int stabilization_on;  /* stabilisation active */
-
-    int ankle_lock_on;     /* maintien cheville */
-
-    int vibration_level;   /* niveau vibration */
-
-    int buzzer_on;         /* buzzer alerte */
-
-    int led_state;         /* LED état système */
-
-} ActuatorState;
-
-
-/* ===================================== */
-/* VARIABLES PARTAGEES ENTRE THREADS     */
-/* ===================================== */
-
-/* Données capteurs */
-extern SensorData sensor_data;
-
-/* Cartographie terrain */
-extern MapData map_data;
-
-/* Etat du système */
-extern FallState fall_state;
-
-/* Etat des actionneurs */
-extern ActuatorState actuator_state;
-
-
-/* Mutex pour protéger les accès concurrents */
-extern pthread_mutex_t data_mutex;
-
-
-/* Variable globale pour arrêter les threads si besoin */
-extern int system_running;
-
-
-/* ===================================== */
-/* PROTOTYPES DES THREADS                */
-/* ===================================== */
-
-/* Simulation capteurs */
-void *sensor_simulation_task(void *arg);
-
-/* Cartographie terrain */
-void *mapping_task(void *arg);
-
-/* Détection de chute */
-void *fall_detection_task(void *arg);
-
-/* Stabilisation et alertes */
-void *stabilization_alert_task(void *arg);
-
-/* Interface utilisateur */
-void *display_ui_task(void *arg);
-
-
-#endif
+    return NULL;
+}

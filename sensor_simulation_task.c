@@ -109,7 +109,7 @@ void* sensor_simulation_task(void* arg) {
     int scenario = 0;
     int counter = 0;
 
-    while (program_running) {
+    while (system_running) {
 
         /* change scenario every 8 iterations */
         if (counter % 8 == 0) {
