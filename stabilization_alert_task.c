@@ -24,19 +24,17 @@ void *stabilization_alert_task(void *arg)
     (void)arg;
 
     /* ================================================ */
-    /* Configuration SCHED_FIFO - Priorite 70           */
-    /* ================================================ */
     /* La stabilisation doit reagir vite apres la        */
     /* detection de chute (80) pour commander les         */
     /* actionneurs sans delai.                           */
     /* ================================================ */
 
     struct sched_param param;
-    param.sched_priority = 60;  /* Priorite stabilisation : 70 */
+    param.sched_priority = 60;  /* stabilisation */
 
     int ret = pthread_setschedparam(
         pthread_self(),    /* Thread courant */
-        SCHED_FIFO,        /* Politique temps-reel FIFO */
+        SCHED_FIFO,        /* Mode temps-reel FIFO */
         &param             /* Parametres (priorite) */
     );
 
@@ -54,7 +52,6 @@ void *stabilization_alert_task(void *arg)
                param.sched_priority);
     }
 
-    /* Boucle principale */
 
     while (system_running)
     {
@@ -71,7 +68,7 @@ void *stabilization_alert_task(void *arg)
         pthread_mutex_unlock(&data_mutex);
 
 
-        /* Mise à jour des actionneurs */
+        /* Mise à jour des actionneurs selon l'input */
 
         pthread_mutex_lock(&data_mutex);
 
