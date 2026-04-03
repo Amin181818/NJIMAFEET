@@ -30,7 +30,7 @@ void *mapping_task(void *arg)
     /* ================================================ */
 
     struct sched_param param;
-    param.sched_priority = 60;  /* Priorite mapping : 60 */
+    param.sched_priority = 30;  /* Priorite mapping : 60 */
 
     int ret = pthread_setschedparam(
         pthread_self(),    /* Thread courant */
