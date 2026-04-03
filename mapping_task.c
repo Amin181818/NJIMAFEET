@@ -111,10 +111,11 @@ void *mapping_task(void *arg)
         map_data.terrain_slope = slope;
         map_data.obstacle_distance = obs_distance;
         map_data.terrain_risk_level = risk_level;
+        thread_stats[THREAD_MAPPING].exec_count++;
 
         pthread_mutex_unlock(&data_mutex);
 
-        usleep(300000); /* 300 ms */
+        usleep(50000); /* 50 ms — rapide pour montrer l'ordonnancement */
     }
 
     return NULL;

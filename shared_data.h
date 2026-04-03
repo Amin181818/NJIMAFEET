@@ -153,4 +153,26 @@ void *stabilization_alert_task(void *arg);
 void *display_ui_task(void *arg);
 
 
+/* ===================================== */
+/* STATISTIQUES D'ORDONNANCEMENT         */
+/* ===================================== */
+
+/* Index des threads dans le tableau thread_stats[] */
+#define THREAD_SENSOR       0
+#define THREAD_MAPPING      1
+#define THREAD_FALL_DET     2
+#define THREAD_STAB_ALERT   3
+#define THREAD_DISPLAY      4
+
+/* Structure de suivi par thread */
+typedef struct {
+    unsigned long exec_count;   /* nombre total d'executions de la boucle */
+    int           priority;     /* priorite SCHED_FIFO configuree */
+    const char   *name;         /* nom du thread pour l'affichage */
+} ThreadStats;
+
+/* Tableau global des stats (un par thread) */
+extern ThreadStats thread_stats[NB_THREADS];
+
+
 #endif

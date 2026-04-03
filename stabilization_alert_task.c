@@ -19,11 +19,6 @@
     Priorite SCHED_FIFO : 70
 */
 
-static void sleep_ms(int ms)
-{
-    usleep(ms * 1000);
-}
-
 void *stabilization_alert_task(void *arg)
 {
     (void)arg;
@@ -156,11 +151,13 @@ void *stabilization_alert_task(void *arg)
             actuator_state.led_state = LED_RED;
         }
 
+        thread_stats[THREAD_STAB_ALERT].exec_count++;
+
         pthread_mutex_unlock(&data_mutex);
 
 
         /* Fréquence de la tâche */
-        sleep_ms(100);
+        usleep(50000); /* 50 ms — rapide pour montrer l'ordonnancement */
     }
 
     return NULL;

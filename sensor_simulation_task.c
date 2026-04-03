@@ -155,11 +155,12 @@ void* sensor_simulation_task(void* arg) {
 
         pthread_mutex_lock(&data_mutex);
         generate_sensor_data(&sensor_data, scenario);
+        thread_stats[THREAD_SENSOR].exec_count++;
         pthread_mutex_unlock(&data_mutex);
 
         counter++;
 
-        usleep(500000); /* 500 ms */
+        usleep(50000); /* 50 ms — rapide pour montrer l'ordonnancement */
     }
 
     pthread_exit(NULL);

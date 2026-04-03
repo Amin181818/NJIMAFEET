@@ -249,12 +249,18 @@ void *display_ui_task(void *arg)
         FallState     local_fall;
         ActuatorState local_actuator;
 
+        /* Copie locale des stats d'ordonnancement */
+        ThreadStats local_stats[NB_THREADS];
+
         /* Lecture protegee des donnees partagees */
         pthread_mutex_lock(&data_mutex);
         local_sensor   = sensor_data;
         local_map      = map_data;
         local_fall     = fall_state;
         local_actuator = actuator_state;
+        for (int i = 0; i < NB_THREADS; i++)
+            local_stats[i] = thread_stats[i];
+        thread_stats[THREAD_DISPLAY].exec_count++;
         pthread_mutex_unlock(&data_mutex);
 
         /* Effacer l'ecran sans clignotement */
@@ -346,11 +352,69 @@ void *display_ui_task(void *arg)
 
         print_onoff(local_actuator.buzzer_on, "Buzzer");
 
+        /* ========== ORDONNANCEMENT ========== */
+        printf("\n  " BOLD FG_BLUE "▸ ORDONNANCEMENT TEMPS-REEL (SCHED_FIFO)" RESET "\n");
+        printf(DIM "  %-22s  %4s  %10s  Activite" RESET "\n",
+               "Thread", "Prio", "Exec");
+
+        /* Trouver le max pour normaliser les barres */
+        unsigned long max_exec = 1;
+        for (int i = 0; i < NB_THREADS; i++)
+        {
+            if (local_stats[i].exec_count > max_exec)
+                max_exec = local_stats[i].exec_count;
+        }
+
+        /* Trier par priorite decroissante pour l'affichage */
+        int order[NB_THREADS];
+        for (int i = 0; i < NB_THREADS; i++) order[i] = i;
+        for (int i = 0; i < NB_THREADS - 1; i++)
+        {
+            for (int j = i + 1; j < NB_THREADS; j++)
+            {
+                if (local_stats[order[j]].priority > local_stats[order[i]].priority)
+                {
+                    int tmp = order[i];
+                    order[i] = order[j];
+                    order[j] = tmp;
+                }
+            }
+        }
+
+        for (int k = 0; k < NB_THREADS; k++)
+        {
+            int idx = order[k];
+            unsigned long count = local_stats[idx].exec_count;
+            int prio = local_stats[idx].priority;
+            const char *name = local_stats[idx].name;
+
+            /* Couleur selon la priorite */
+            const char *color;
+            if (prio >= 80) color = FG_RED;
+            else if (prio >= 70) color = FG_YELLOW;
+            else if (prio >= 60) color = FG_CYAN;
+            else if (prio >= 50) color = FG_GREEN;
+            else color = DIM;
+
+            /* Barre proportionnelle (20 chars max) */
+            int bar_len = (int)((count * 20) / max_exec);
+            if (bar_len < 0) bar_len = 0;
+            if (bar_len > 20) bar_len = 20;
+
+            printf("  %s%-22s  %4d  %10lu  [", color, name, prio, count);
+            for (int b = 0; b < 20; b++)
+            {
+                if (b < bar_len) printf("█");
+                else printf(DIM "░" RESET "%s", color);
+            }
+            printf("]" RESET "\n");
+        }
+
         /* ========== PIED DE PAGE ========== */
         printf(FG_CYAN
                "\n  ══════════════════════════════════════════════════\n"
                RESET);
-        printf(DIM "  Ctrl+C pour quitter" RESET "\n");
+        printf(DIM "  Ctrl+C pour quitter  |  sudo ./safefeet pour priorites RT" RESET "\n");
 
         /* Rafraichissement */
         fflush(stdout);

@@ -40,6 +40,15 @@ pthread_mutex_t data_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 int system_running = 1;
 
+/* Statistiques d'ordonnancement pour chaque thread */
+ThreadStats thread_stats[NB_THREADS] = {
+    { 0, 50, "sensor_simulation" },   /* THREAD_SENSOR     */
+    { 0, 60, "mapping"           },   /* THREAD_MAPPING    */
+    { 0, 80, "fall_detection"    },   /* THREAD_FALL_DET   */
+    { 0, 70, "stabilization"     },   /* THREAD_STAB_ALERT */
+    { 0, 40, "display_ui"        },   /* THREAD_DISPLAY    */
+};
+
 /* ===================================== */
 /* Gestion de l'arret propre (Ctrl+C)   */
 /* ===================================== */

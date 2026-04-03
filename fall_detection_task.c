@@ -140,9 +140,10 @@ void *fall_detection_task(void *arg)
         /* Ecriture de l'etat */
         pthread_mutex_lock(&data_mutex);
         fall_state = new_state;
+        thread_stats[THREAD_FALL_DET].exec_count++;
         pthread_mutex_unlock(&data_mutex);
 
-        usleep(200000); /* 200 ms */
+        usleep(50000); /* 50 ms — rapide pour montrer l'ordonnancement */
     }
 
     return NULL;
