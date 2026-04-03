@@ -228,7 +228,7 @@ void *display_ui_task(void *arg)
         printf("\n");
         printf(BOLD FG_CYAN
                "  ╔══════════════════════════════════════════════════╗\n"
-               "  ║            SAFEFEET BY NJIMA                    ║\n"
+               "  ║            SAFEFEET BY NJIMA                     ║\n"
                "  ╚══════════════════════════════════════════════════╝\n"
                RESET);
 
