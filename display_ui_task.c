@@ -217,7 +217,7 @@ void *display_ui_task(void *arg)
     /* ================================================ */
 
     struct sched_param param;
-    param.sched_priority = 40;  /* Priorite IHM : 40 (min) */
+    param.sched_priority = 10;  /* Priorite IHM : 40 (min) */
 
     int ret = pthread_setschedparam(
         pthread_self(),    /* Thread courant */
