@@ -1,0 +1,365 @@
+Répartition en 5 en C
+1. Personne 1 — Génération des données simulées
+Fichier conseillé
+
+sensor_simulation.c
+
+Tâche
+
+Créer les données simulées des capteurs.
+
+Ce qu’il doit coder
+génération de :
+accélération
+inclinaison
+rotation
+pression pied gauche / droit
+profondeur simulée
+plusieurs scénarios :
+marche normale
+glissade
+trou
+obstacle
+perte d’équilibre
+Ce qu’il fournit aux autres
+
+Une structure commune du style :
+
+typedef struct {
+    float accel;
+    float tilt;
+    float gyro;
+    float pressure_left;
+    float pressure_right;
+    float depth;
+    int mode_scenario;
+} SensorData;
+Objectif
+
+Alimenter tout le système avec des données réalistes.
+
+Priorité
+
+45
+
+2. Personne 2 — Cartographie du terrain
+Fichier conseillé
+
+mapping.c
+
+Tâche
+
+Simuler la cartographie de l’environnement à partir des données des :
+
+2 caméras haute résolution
+1 capteur de profondeur
+
+Comme tout est simulé, il n’a pas besoin de vraie vision, il peut générer directement les états terrain.
+
+Ce qu’il doit coder
+détection de :
+trou
+obstacle
+zone glissante
+pente
+défaut de chaussée
+mise à jour d’une structure terrain
+Structure possible
+typedef struct {
+    int hole_detected;
+    int obstacle_detected;
+    int slippery_surface;
+    float terrain_slope;
+    float obstacle_distance;
+} MapData;
+Objectif
+
+Créer une “vision simplifiée” du terrain.
+
+Priorité
+
+40
+
+3. Personne 3 — Détection de chute
+Fichier conseillé
+
+fall_detection.c
+
+Tâche
+
+Analyser :
+
+les données du corps
+les données du terrain
+
+puis décider du niveau de danger.
+
+Ce qu’il doit coder
+logique de décision
+seuils
+états possibles :
+normal
+warning
+risque
+chute imminente
+Structure possible
+typedef enum {
+    STATE_NORMAL,
+    STATE_WARNING,
+    STATE_FALL_RISK,
+    STATE_FALL_IMMINENT
+} FallState;
+Exemples de règles
+forte inclinaison + faible pression stable → warning
+obstacle + accélération anormale → fall risk
+trou + déséquilibre important → fall imminent
+Objectif
+
+Être le “cerveau sécurité” du système.
+
+Priorité
+
+60
+
+4. Personne 4 — Stabilisation et alertes
+Fichier conseillé
+
+stabilization_alert.c
+
+Tâche
+
+Définir la réaction du système quand un danger est détecté.
+
+Ce qu’il doit coder
+activation de la stabilisation
+verrouillage cheville simulé
+vibrations d’alerte
+buzzer / LED simulés
+Structure possible
+typedef struct {
+    int stabilization_on;
+    int ankle_lock_on;
+    int vibration_level;
+    int buzzer_on;
+    int led_state;
+} ActuatorState;
+Logique
+STATE_WARNING → vibration faible
+STATE_FALL_RISK → vibration forte + stabilisation
+STATE_FALL_IMMINENT → stabilisation complète + buzzer
+Objectif
+
+Traduire le risque en réaction.
+
+Priorité
+
+55
+
+5. Personne 5 — IHM en C
+Fichier conseillé
+
+display_ui.c
+
+Tâche
+
+Créer l’IHM en C pour visualiser la simulation.
+
+Deux options
+Option simple
+
+Afficher dans le terminal avec printf
+
+Option mieux
+
+Utiliser ncurses pour une interface texte propre
+
+Ce qu’il doit afficher
+capteurs :
+accélération
+inclinaison
+pression
+état terrain :
+trou
+obstacle
+glissant
+état système :
+normal / risque / chute imminente
+actionneurs :
+stabilisation ON/OFF
+vibration
+buzzer
+Objectif
+
+Représenter clairement le fonctionnement du système.
+
+Priorité
+
+10
+
+Tableau final
+Personne	Fichier	Tâche	Priorité
+1	sensor_simulation.c	génération des données	45
+2	mapping.c	cartographie terrain	40
+3	fall_detection.c	détection de chute	60
+4	stabilization_alert.c	réaction et alerte	55
+5	display_ui.c	IHM en C	10
+Fichiers à prévoir
+
+Je vous conseille cette structure :
+
+main.c
+shared_data.h
+sensor_simulation.c
+mapping.c
+fall_detection.c
+stabilization_alert.c
+display_ui.c
+Rôle de main.c
+
+Le main :
+
+initialise les données
+crée les threads
+lance chaque tâche
+gère éventuellement les mutex
+attend les threads si besoin
+Rôle de shared_data.h
+
+Dans ce fichier, vous mettez :
+
+toutes les structures partagées
+les variables globales
+les prototypes des fonctions
+les mutex si vous en utilisez
+
+Exemple :
+
+#ifndef SHARED_DATA_H
+#define SHARED_DATA_H
+
+#include <pthread.h>
+
+typedef struct {
+    float accel;
+    float tilt;
+    float gyro;
+    float pressure_left;
+    float pressure_right;
+    float depth;
+    int mode_scenario;
+} SensorData;
+
+typedef struct {
+    int hole_detected;
+    int obstacle_detected;
+    int slippery_surface;
+    float terrain_slope;
+    float obstacle_distance;
+} MapData;
+
+typedef enum {
+    STATE_NORMAL,
+    STATE_WARNING,
+    STATE_FALL_RISK,
+    STATE_FALL_IMMINENT
+} FallState;
+
+typedef struct {
+    int stabilization_on;
+    int ankle_lock_on;
+    int vibration_level;
+    int buzzer_on;
+    int led_state;
+} ActuatorState;
+
+extern SensorData sensor_data;
+extern MapData map_data;
+extern FallState fall_state;
+extern ActuatorState actuator_state;
+
+extern pthread_mutex_t data_mutex;
+
+#endif
+Exemple d’IHM en C
+
+La personne 5 peut afficher quelque chose comme :
+
+==============================
+     SAFEFEET BY NJIMA
+==============================
+
+Capteurs
+Accel        : 1.82
+Tilt         : 14.3 deg
+Gyro         : 2.9
+Pressure L   : 38.0
+Pressure R   : 62.0
+Depth        : 0.45
+
+Terrain
+Hole         : YES
+Obstacle     : NO
+Slippery     : YES
+Slope        : 8.2
+
+Etat systeme
+Fall State   : FALL_RISK
+
+Actionneurs
+Stabilizer   : ON
+Ankle Lock   : ON
+Vibration    : 2
+Buzzer       : OFF
+LED          : ORANGE
+Comment chacun travaille
+Personne 1
+
+Travaille surtout sur :
+
+rand()
+scénarios
+mise à jour de sensor_data
+Personne 2
+
+Travaille sur :
+
+règles de terrain
+mise à jour de map_data
+Personne 3
+
+Travaille sur :
+
+conditions et seuils
+mise à jour de fall_state
+Personne 4
+
+Travaille sur :
+
+lecture de fall_state
+mise à jour de actuator_state
+Personne 5
+
+Travaille sur :
+
+lecture de toutes les structures
+affichage temps réel
+Ordre de développement conseillé
+personne 1 fait les données
+personne 2 fait le terrain
+personne 3 fait la logique de chute
+personne 4 fait les réactions
+personne 5 branche l’IHM
+Pour l’IHM en C
+
+Je te conseille vraiment :
+
+version simple : printf + system("clear")
+version propre : ncurses
+
+Si vous voulez aller vite, faites d’abord printf.
+
+Phrase à dire à votre groupe
+
+Le projet sera entièrement développé en C. Chaque membre prendra en charge une tâche fonctionnelle du système : simulation des capteurs, cartographie de l’environnement, détection de chute, stabilisation/alerte et interface homme-machine. L’intégration finale se fera dans un programme multithread utilisant des structures partagées.
+
+Si tu veux, je peux maintenant te faire le squelette complet des 6 fichiers C + header, prêt à répartir entre les 5 personnes.
