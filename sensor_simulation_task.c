@@ -8,26 +8,6 @@
 #include <sched.h>
 #include "shared_data.h"
 
-/*
-    SafeFeet by Njima
-    sensor_simulation_task.c
-
-    Simulation des donnees capteurs :
-    - accelerometre
-    - gyroscope
-    - inclinaison (tilt)
-    - pression pied gauche / droit
-    - capteur de profondeur
-
-    Priorite SCHED_FIFO : 50
-    Scenarios simules :
-    0 -> marche normale
-    1 -> surface glissante
-    2 -> obstacle
-    3 -> nid de poule
-    4 -> perte d'equilibre
-*/
-
 static float random_float(float min, float max) {
     return min + ((float)rand() / (float)RAND_MAX) * (max - min);
 }
@@ -108,32 +88,22 @@ static void generate_sensor_data(SensorData *data, int scenario) {
 void* sensor_simulation_task(void* arg) {
     (void)arg;
 
-    /* ================================================ */
-    /* Configuration SCHED_FIFO - Priorite 50           */
-    /* ================================================ */
-    /* pthread_setschedparam permet de modifier la       */
-    /* politique d'ordonnancement du thread courant.     */
-    /* SCHED_FIFO = First In First Out temps-reel :      */
-    /* le thread s'execute tant qu'il n'est pas bloque   */
-    /* ou preempte par un thread de priorite superieure. */
-    /* ================================================ */
-
     struct sched_param param;
-    param.sched_priority = 50;  /* Priorite capteurs : 50 */
+    param.sched_priority = 50; 
 
     int ret = pthread_setschedparam(
-        pthread_self(),    /* Thread courant */
-        SCHED_FIFO,        /* Politique temps-reel FIFO */
-        &param             /* Parametres (priorite) */
+        pthread_self(),   
+        SCHED_FIFO,       
+        &param        
     );
 
     if (ret != 0)
     {
         fprintf(stderr,
-                "[sensor_simulation] WARN: pthread_setschedparam echoue: %s\n",
+                "[sensor_simulation] pthread_setschedparam echoue: %s\n",
                 strerror(ret));
         fprintf(stderr,
-                "[sensor_simulation] Lancez avec sudo pour les priorites RT.\n");
+                "[sensor_simulation] Lancez avec sudo pour les priorites.\n");
     }
     else
     {
@@ -148,7 +118,7 @@ void* sensor_simulation_task(void* arg) {
 
     while (system_running) {
 
-        /* change scenario every 8 iterations */
+        /* change de scenario tous les 8 iterations */
         if (counter % 8 == 0) {
             scenario = rand() % 5;
         }
@@ -160,7 +130,7 @@ void* sensor_simulation_task(void* arg) {
 
         counter++;
 
-        usleep(80000); /* 80 ms — priorite 50 : moyen */
+        usleep(80000);
     }
 
     pthread_exit(NULL);
