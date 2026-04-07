@@ -121,6 +121,7 @@ void *display_ui_task(void *arg)
     printf(HIDE_CURSOR);
 
     long next_deadline = 0;
+    unsigned long prev_exec[NB_THREADS] = {0};
 
     while (system_running)
     {
@@ -147,6 +148,7 @@ void *display_ui_task(void *arg)
         for (int i = 0; i < NB_THREADS; i++)
             local_stats[i] = thread_stats[i];
         pthread_mutex_unlock(&data_mutex);
+
 
         printf(CLEAR_SCREEN);
 
@@ -243,10 +245,13 @@ void *display_ui_task(void *arg)
             else if (t->priority >= 50) color = FG_GREEN;
             else                        color = DIM;
 
-            /* Etat RUN/idle */
-            const char *etat = t->is_running
+            /* Etat RUN/idle : RUN si la tache a tourne au moins une
+               fois depuis le dernier rafraichissement de l'IHM */
+            int active = (t->exec_count > prev_exec[idx]);
+            const char *etat = active
                 ? FG_GREEN BOLD "RUN " RESET
                 : DIM      "idle" RESET;
+            prev_exec[idx] = t->exec_count;
 
             /* Barre proportionnelle (16 chars) */
             int bar_len = (int)((t->exec_count * 16) / max_exec);
