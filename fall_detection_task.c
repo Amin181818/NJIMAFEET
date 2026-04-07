@@ -2,60 +2,47 @@
 #include <unistd.h>
 #include <string.h>
 #include <math.h>
+#include <time.h>
 #include <pthread.h>
 #include <sched.h>
 #include "shared_data.h"
 
 /*
-    SafeFeet by Njima
     fall_detection_task.c
-
-    Cerveau securite du systeme.
-    Analyse les donnees capteurs et terrain pour determiner
-    le niveau de danger : NORMAL, WARNING, FALL_RISK, FALL_IMMINENT.
-
-    Priorite SCHED_FIFO : 80 (la plus elevee du systeme)
-    Ce thread est le plus critique : il decide du niveau de danger.
+    Tache critique : decide du niveau de danger.
+    Priorite : 80 (la plus haute)  -  Periode : 20 ms
 */
+
+/* Donne le temps en microsecondes */
+static long monotonic_us(void) {
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return t.tv_sec * 1000000L + t.tv_nsec / 1000;
+}
 
 void *fall_detection_task(void *arg)
 {
     (void)arg;
 
-    /* ================================================ */
-    /* Configuration SCHED_FIFO - Priorite 80           */
-    /* ================================================ */
-    /* La detection de chute a la priorite la plus       */
-    /* elevee du systeme. Elle preempte tous les autres  */
-    /* threads pour garantir une reaction immediate      */
-    /* en cas de danger.                                 */
-    /* ================================================ */
-
+    /* On configure la priorite SCHED_FIFO */
     struct sched_param param;
-    param.sched_priority = 90;
-
-    int ret = pthread_setschedparam(
-        pthread_self(),    /* Thread courant */
-        SCHED_FIFO,        /* Politique temps-reel FIFO */
-        &param             /* Parametres (priorite) */
-    );
-
-    if (ret != 0)
-    {
-        fprintf(stderr,
-                "[fall_detection] WARN: pthread_setschedparam echoue: %s\n",
-                strerror(ret));
-        fprintf(stderr,
-                "[fall_detection] Lancez avec sudo pour les priorites RT.\n");
-    }
-    else
-    {
-        printf("[fall_detection] SCHED_FIFO active, priorite = %d\n",
-               param.sched_priority);
+    param.sched_priority = 80;
+    int ret = pthread_setschedparam(pthread_self(), SCHED_FIFO, &param);
+    if (ret != 0) {
+        fprintf(stderr, "[fall_detection] WARN: %s (sudo conseille)\n", strerror(ret));
+    } else {
+        printf("[fall_detection] SCHED_FIFO prio=%d\n", param.sched_priority);
     }
 
     while (system_running)
     {
+        /* Debut : on note l'heure */
+        long t0 = monotonic_us();
+
+        pthread_mutex_lock(&data_mutex);
+        thread_stats[THREAD_FALL_DET].is_running = 1;
+        pthread_mutex_unlock(&data_mutex);
+
         SensorData local_sensor;
         MapData local_map;
 
@@ -65,85 +52,67 @@ void *fall_detection_task(void *arg)
         local_map = map_data;
         pthread_mutex_unlock(&data_mutex);
 
-        /* Score de danger (plus c'est haut, plus c'est grave) */
+        /* Score de danger */
         int danger_score = 0;
 
-        /* --- Analyse des capteurs corporels --- */
+        /* Acceleration */
+        if (local_sensor.accel > 3.0f) danger_score += 3;
+        else if (local_sensor.accel > 2.0f) danger_score += 1;
 
-        /* Forte acceleration = mouvement brusque */
-        if (local_sensor.accel > 3.0f)
-            danger_score += 3;
-        else if (local_sensor.accel > 2.0f)
-            danger_score += 1;
-
-        /* Forte inclinaison = desequilibre */
+        /* Inclinaison */
         float abs_tilt = fabsf(local_sensor.tilt);
-        if (abs_tilt > 20.0f)
-            danger_score += 3;
-        else if (abs_tilt > 12.0f)
-            danger_score += 2;
-        else if (abs_tilt > 8.0f)
-            danger_score += 1;
+        if (abs_tilt > 20.0f) danger_score += 3;
+        else if (abs_tilt > 12.0f) danger_score += 2;
+        else if (abs_tilt > 8.0f) danger_score += 1;
 
-        /* Forte rotation = instabilite */
-        if (local_sensor.gyro > 6.0f)
-            danger_score += 3;
-        else if (local_sensor.gyro > 4.0f)
-            danger_score += 2;
-        else if (local_sensor.gyro > 2.5f)
-            danger_score += 1;
+        /* Rotation */
+        if (local_sensor.gyro > 6.0f) danger_score += 3;
+        else if (local_sensor.gyro > 4.0f) danger_score += 2;
+        else if (local_sensor.gyro > 2.5f) danger_score += 1;
 
-        /* Desequilibre de pression entre les pieds */
+        /* Difference de pression entre les pieds */
         float pressure_diff = fabsf(local_sensor.pressure_left - local_sensor.pressure_right);
-        if (pressure_diff > 40.0f)
-            danger_score += 3;
-        else if (pressure_diff > 25.0f)
-            danger_score += 2;
-        else if (pressure_diff > 15.0f)
-            danger_score += 1;
+        if (pressure_diff > 40.0f) danger_score += 3;
+        else if (pressure_diff > 25.0f) danger_score += 2;
+        else if (pressure_diff > 15.0f) danger_score += 1;
 
         /* Pression totale faible = pied qui decolle */
         float total_pressure = local_sensor.pressure_left + local_sensor.pressure_right;
-        if (total_pressure < 40.0f)
-            danger_score += 2;
+        if (total_pressure < 40.0f) danger_score += 2;
 
-        /* --- Analyse du terrain --- */
+        /* Terrain */
+        if (local_map.hole_detected) danger_score += 3;
+        if (local_map.obstacle_detected && local_map.obstacle_distance < 0.5f) danger_score += 2;
+        else if (local_map.obstacle_detected) danger_score += 1;
+        if (local_map.slippery_surface) danger_score += 2;
+        if (local_map.terrain_slope > 15.0f) danger_score += 2;
+        else if (local_map.terrain_slope > 10.0f) danger_score += 1;
 
-        if (local_map.hole_detected)
-            danger_score += 3;
-
-        if (local_map.obstacle_detected && local_map.obstacle_distance < 0.5f)
-            danger_score += 2;
-        else if (local_map.obstacle_detected)
-            danger_score += 1;
-
-        if (local_map.slippery_surface)
-            danger_score += 2;
-
-        if (local_map.terrain_slope > 15.0f)
-            danger_score += 2;
-        else if (local_map.terrain_slope > 10.0f)
-            danger_score += 1;
-
-        /* --- Decision finale --- */
+        /* Decision finale */
         FallState new_state;
-
-        if (danger_score >= 10)
-            new_state = STATE_FALL_IMMINENT;
-        else if (danger_score >= 6)
-            new_state = STATE_FALL_RISK;
-        else if (danger_score >= 3)
-            new_state = STATE_WARNING;
-        else
-            new_state = STATE_NORMAL;
+        if (danger_score >= 10)     new_state = STATE_FALL_IMMINENT;
+        else if (danger_score >= 6) new_state = STATE_FALL_RISK;
+        else if (danger_score >= 3) new_state = STATE_WARNING;
+        else                        new_state = STATE_NORMAL;
 
         /* Ecriture de l'etat */
         pthread_mutex_lock(&data_mutex);
         fall_state = new_state;
-        thread_stats[THREAD_FALL_DET].exec_count++;
         pthread_mutex_unlock(&data_mutex);
 
-        usleep(20000); /* 20 ms — priorite 80 : le plus rapide */
+        /* Fin : on calcule la duree et on met a jour les stats */
+        long dur = monotonic_us() - t0;
+        pthread_mutex_lock(&data_mutex);
+        thread_stats[THREAD_FALL_DET].is_running    = 0;
+        thread_stats[THREAD_FALL_DET].exec_count++;
+        thread_stats[THREAD_FALL_DET].last_exec_us  = dur;
+        if (dur > thread_stats[THREAD_FALL_DET].max_exec_us)
+            thread_stats[THREAD_FALL_DET].max_exec_us = dur;
+        if (dur > thread_stats[THREAD_FALL_DET].period_ms * 1000L)
+            thread_stats[THREAD_FALL_DET].deadline_missed++;
+        pthread_mutex_unlock(&data_mutex);
+
+        usleep(20000); /* periode 20 ms */
     }
 
     return NULL;

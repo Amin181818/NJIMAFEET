@@ -5,127 +5,73 @@
 #include "shared_data.h"
 
 /*
-    SafeFeet by Njima
-    main.c
-
-    Point d'entree du systeme.
-    Initialise les donnees partagees, cree les 5 threads
-    et attend leur terminaison.
-
-    Politique d'ordonnancement : SCHED_FIFO
-    ----------------------------------------
-    Chaque thread configure sa propre priorite SCHED_FIFO
-    via pthread_setschedparam(pthread_self(), ...) au demarrage.
-
-    Priorites SCHED_FIFO (echelle Linux : 1 - 99) :
-      fall_detection      : 80  (reaction critique)
-      stabilization_alert : 70  (commande actionneurs)
-      mapping             : 60  (traitement terrain)
-      sensor_simulation   : 50  (acquisition donnees)
-      display_ui          : 40  (affichage non critique)
-
-    Note : SCHED_FIFO necessite les privileges root (sudo).
+    SafeFeet by Njima - main.c
+    Cree les 5 threads et attend leur fin.
+    Ordonnancement : SCHED_FIFO (priorites configurees dans chaque thread).
 */
 
-/* ===================================== */
-/* Definition des variables partagees    */
-/* ===================================== */
-
-SensorData sensor_data = {0};
-MapData map_data = {0};
-FallState fall_state = STATE_NORMAL;
+/* Variables partagees */
+SensorData    sensor_data    = {0};
+MapData       map_data       = {0};
+FallState     fall_state     = STATE_NORMAL;
 ActuatorState actuator_state = {0};
 
 pthread_mutex_t data_mutex = PTHREAD_MUTEX_INITIALIZER;
-
 int system_running = 1;
 
-/* Statistiques d'ordonnancement pour chaque thread */
+/* Stats des taches : { 0, prio, nom, periode, 0, 0, 0, 0 } */
 ThreadStats thread_stats[NB_THREADS] = {
-    { 0, 50, "sensor_simulation" },   /* THREAD_SENSOR     */
-    { 0, 30, "mapping"           },   /* THREAD_MAPPING    */
-    { 0, 90, "fall_detection"    },   /* THREAD_FALL_DET   */
-    { 0, 60, "stabilization"     },   /* THREAD_STAB_ALERT */
-    { 0, 10, "display_ui"        },   /* THREAD_DISPLAY    */
+    { 0, 50, "sensor_simulation",  80, 0, 0, 0, 0 },
+    { 0, 60, "mapping",            50, 0, 0, 0, 0 },
+    { 0, 80, "fall_detection",     20, 0, 0, 0, 0 },
+    { 0, 70, "stabilization",      35, 0, 0, 0, 0 },
+    { 0, 40, "display_ui",        200, 0, 0, 0, 0 },
 };
 
-/* ===================================== */
-/* Gestion de l'arret propre (Ctrl+C)   */
-/* ===================================== */
-
+/* Ctrl+C */
 static void signal_handler(int sig)
 {
     (void)sig;
     system_running = 0;
 }
 
-/* ===================================== */
-/* Main                                  */
-/* ===================================== */
-
 int main(void)
 {
     pthread_t threads[NB_THREADS];
 
-    /* Installation du handler pour Ctrl+C */
     signal(SIGINT, signal_handler);
 
-    printf("====================================================\n");
-    printf("         SAFEFEET BY NJIMA - Demarrage...\n");
-    printf("====================================================\n");
-    printf(" Ordonnancement : SCHED_FIFO\n");
-    printf(" Chaque thread configure sa priorite en interne.\n");
-    printf(" (sudo requis pour les priorites temps-reel)\n");
-    printf("====================================================\n\n");
+    printf("=== SAFEFEET BY NJIMA - Demarrage ===\n");
+    printf("Ordonnancement SCHED_FIFO (sudo conseille)\n\n");
 
-    /* Creation des 5 threads */
-    /* Chaque thread appelle pthread_setschedparam() en interne */
-
-    if (pthread_create(&threads[0], NULL, sensor_simulation_task, NULL) != 0)
-    {
-        perror("Erreur creation thread sensor_simulation");
+    /* Lancement des threads */
+    if (pthread_create(&threads[0], NULL, sensor_simulation_task, NULL) != 0) {
+        perror("sensor_simulation");
+        return EXIT_FAILURE;
+    }
+    if (pthread_create(&threads[1], NULL, mapping_task, NULL) != 0) {
+        perror("mapping");
+        return EXIT_FAILURE;
+    }
+    if (pthread_create(&threads[2], NULL, fall_detection_task, NULL) != 0) {
+        perror("fall_detection");
+        return EXIT_FAILURE;
+    }
+    if (pthread_create(&threads[3], NULL, stabilization_alert_task, NULL) != 0) {
+        perror("stabilization_alert");
+        return EXIT_FAILURE;
+    }
+    if (pthread_create(&threads[4], NULL, display_ui_task, NULL) != 0) {
+        perror("display_ui");
         return EXIT_FAILURE;
     }
 
-    if (pthread_create(&threads[1], NULL, mapping_task, NULL) != 0)
-    {
-        perror("Erreur creation thread mapping");
-        return EXIT_FAILURE;
-    }
-
-    if (pthread_create(&threads[2], NULL, fall_detection_task, NULL) != 0)
-    {
-        perror("Erreur creation thread fall_detection");
-        return EXIT_FAILURE;
-    }
-
-    if (pthread_create(&threads[3], NULL, stabilization_alert_task, NULL) != 0)
-    {
-        perror("Erreur creation thread stabilization_alert");
-        return EXIT_FAILURE;
-    }
-
-    if (pthread_create(&threads[4], NULL, display_ui_task, NULL) != 0)
-    {
-        perror("Erreur creation thread display_ui");
-        return EXIT_FAILURE;
-    }
-
-    printf("Tous les threads sont lances.\n");
-    printf("Appuyez sur Ctrl+C pour arreter.\n\n");
-
-    /* Attente de la fin de tous les threads */
+    /* On attend la fin de tous les threads */
     for (int i = 0; i < NB_THREADS; i++)
-    {
         pthread_join(threads[i], NULL);
-    }
 
-    /* Nettoyage */
     pthread_mutex_destroy(&data_mutex);
 
-    printf("\n====================================================\n");
-    printf("         SAFEFEET BY NJIMA - Arret propre.\n");
-    printf("====================================================\n");
-
+    printf("\n=== SAFEFEET BY NJIMA - Arret ===\n");
     return EXIT_SUCCESS;
 }

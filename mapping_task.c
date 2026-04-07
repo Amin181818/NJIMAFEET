@@ -2,58 +2,47 @@
 #include <unistd.h>
 #include <string.h>
 #include <math.h>
+#include <time.h>
 #include <pthread.h>
 #include <sched.h>
 #include "shared_data.h"
 
 /*
-    SafeFeet by Njima
     mapping_task.c
-
-    Simule la cartographie de l'environnement a partir des donnees capteurs.
-    Analyse les donnees des cameras et du capteur de profondeur
-    pour detecter : trou, obstacle, surface glissante, pente.
-
-    Priorite SCHED_FIFO : 60
+    Tache qui analyse le terrain a partir des donnees capteurs.
+    Priorite : 60  -  Periode : 50 ms
 */
+
+/* Donne le temps en microsecondes */
+static long monotonic_us(void) {
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return t.tv_sec * 1000000L + t.tv_nsec / 1000;
+}
 
 void *mapping_task(void *arg)
 {
     (void)arg;
 
-    /* ================================================ */
-    /* Configuration SCHED_FIFO - Priorite 60           */
-    /* ================================================ */
-    /* Le mapping a une priorite moyenne : il doit       */
-    /* traiter les donnees terrain avant l'affichage     */
-    /* mais apres la detection de chute.                 */
-    /* ================================================ */
-
+    /* On configure la priorite SCHED_FIFO */
     struct sched_param param;
-    param.sched_priority = 30;  /* Priorite mapping : 60 */
-
-    int ret = pthread_setschedparam(
-        pthread_self(),    /* Thread courant */
-        SCHED_FIFO,        /* Politique temps-reel FIFO */
-        &param             /* Parametres (priorite) */
-    );
-
-    if (ret != 0)
-    {
-        fprintf(stderr,
-                "[mapping] WARN: pthread_setschedparam echoue: %s\n",
-                strerror(ret));
-        fprintf(stderr,
-                "[mapping] Lancez avec sudo pour les priorites RT.\n");
-    }
-    else
-    {
-        printf("[mapping] SCHED_FIFO active, priorite = %d\n",
-               param.sched_priority);
+    param.sched_priority = 60;
+    int ret = pthread_setschedparam(pthread_self(), SCHED_FIFO, &param);
+    if (ret != 0) {
+        fprintf(stderr, "[mapping] WARN: %s (sudo conseille)\n", strerror(ret));
+    } else {
+        printf("[mapping] SCHED_FIFO prio=%d\n", param.sched_priority);
     }
 
     while (system_running)
     {
+        /* Debut : on note l'heure */
+        long t0 = monotonic_us();
+
+        pthread_mutex_lock(&data_mutex);
+        thread_stats[THREAD_MAPPING].is_running = 1;
+        pthread_mutex_unlock(&data_mutex);
+
         SensorData local_sensor;
 
         /* Lecture des donnees capteurs */
@@ -69,53 +58,54 @@ void *mapping_task(void *arg)
         float obs_distance = 0.0f;
         int risk_level = 0;
 
-        /* Detection de trou : profondeur elevee */
-        if (local_sensor.depth > 0.15f)
-        {
+        /* Trou : profondeur elevee */
+        if (local_sensor.depth > 0.15f) {
             hole = 1;
             risk_level += 2;
         }
 
-        /* Detection d'obstacle : forte acceleration + profondeur moderee */
-        if (local_sensor.accel > 1.8f && local_sensor.depth > 0.05f)
-        {
+        /* Obstacle : forte acceleration + profondeur moderee */
+        if (local_sensor.accel > 1.8f && local_sensor.depth > 0.05f) {
             obstacle = 1;
             obs_distance = 2.0f - local_sensor.depth * 4.0f;
-            if (obs_distance < 0.2f)
-                obs_distance = 0.2f;
+            if (obs_distance < 0.2f) obs_distance = 0.2f;
             risk_level += 1;
         }
 
-        /* Detection surface glissante : gyro eleve + pression instable */
+        /* Surface glissante : gyro eleve + pression instable */
         float pressure_diff = fabsf(local_sensor.pressure_left - local_sensor.pressure_right);
-        if (local_sensor.gyro > 3.0f && pressure_diff > 15.0f)
-        {
+        if (local_sensor.gyro > 3.0f && pressure_diff > 15.0f) {
             slippery = 1;
             risk_level += 1;
         }
 
-        /* Calcul de la pente a partir de l'inclinaison */
+        /* Pente */
         slope = fabsf(local_sensor.tilt);
-
-        if (slope > 10.0f)
-        {
-            risk_level += 1;
-        }
+        if (slope > 10.0f) risk_level += 1;
 
         /* Ecriture des donnees terrain */
         pthread_mutex_lock(&data_mutex);
-
         map_data.hole_detected = hole;
         map_data.obstacle_detected = obstacle;
         map_data.slippery_surface = slippery;
         map_data.terrain_slope = slope;
         map_data.obstacle_distance = obs_distance;
         map_data.terrain_risk_level = risk_level;
-        thread_stats[THREAD_MAPPING].exec_count++;
-
         pthread_mutex_unlock(&data_mutex);
 
-        usleep(150000); /* 150 ms — priorite 60 : rapide */
+        /* Fin : on calcule la duree et on met a jour les stats */
+        long dur = monotonic_us() - t0;
+        pthread_mutex_lock(&data_mutex);
+        thread_stats[THREAD_MAPPING].is_running    = 0;
+        thread_stats[THREAD_MAPPING].exec_count++;
+        thread_stats[THREAD_MAPPING].last_exec_us  = dur;
+        if (dur > thread_stats[THREAD_MAPPING].max_exec_us)
+            thread_stats[THREAD_MAPPING].max_exec_us = dur;
+        if (dur > thread_stats[THREAD_MAPPING].period_ms * 1000L)
+            thread_stats[THREAD_MAPPING].deadline_missed++;
+        pthread_mutex_unlock(&data_mutex);
+
+        usleep(50000); /* periode 50 ms */
     }
 
     return NULL;
