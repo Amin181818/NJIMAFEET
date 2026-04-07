@@ -36,6 +36,14 @@ static long monotonic_us(void) {
     return t.tv_sec * 1000000L + t.tv_nsec / 1000;
 }
 
+/* Dort jusqu'a une date absolue (evite la derive) */
+static void sleep_until_us(long target_us) {
+    struct timespec t;
+    t.tv_sec  = target_us / 1000000L;
+    t.tv_nsec = (target_us % 1000000L) * 1000L;
+    clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &t, NULL);
+}
+
 static const char *fall_state_color(FallState s) {
     switch (s) {
         case STATE_NORMAL:        return BOLD FG_GREEN;
@@ -272,7 +280,7 @@ void *display_ui_task(void *arg)
         /* Fin : on calcule la duree et on met a jour les stats */
         long t1 = monotonic_us();
         long dur = t1 - t0;
-        int missed = (t1 > next_deadline) ? 1 : 0;
+        int missed = (t1 > next_deadline + 1000) ? 1 : 0;
         next_deadline += 200000L;
 
         pthread_mutex_lock(&data_mutex);
@@ -285,7 +293,7 @@ void *display_ui_task(void *arg)
         pthread_mutex_unlock(&data_mutex);
 
         fflush(stdout);
-        usleep(200000); /* periode 200 ms */
+        sleep_until_us(next_deadline);
     }
 
     printf(SHOW_CURSOR);

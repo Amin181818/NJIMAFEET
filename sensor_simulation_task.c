@@ -92,6 +92,14 @@ static long monotonic_us(void) {
     return t.tv_sec * 1000000L + t.tv_nsec / 1000;
 }
 
+/* Dort jusqu'a une date absolue (evite la derive) */
+static void sleep_until_us(long target_us) {
+    struct timespec t;
+    t.tv_sec  = target_us / 1000000L;
+    t.tv_nsec = (target_us % 1000000L) * 1000L;
+    clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &t, NULL);
+}
+
 void *sensor_simulation_task(void *arg) {
     (void)arg;
 
@@ -132,7 +140,7 @@ void *sensor_simulation_task(void *arg) {
         /* Fin : on calcule la duree et on met a jour les stats */
         long t1 = monotonic_us();
         long dur = t1 - t0;
-        int missed = (t1 > next_deadline) ? 1 : 0;
+        int missed = (t1 > next_deadline + 1000) ? 1 : 0;
         next_deadline += 80000L;
 
         pthread_mutex_lock(&data_mutex);
@@ -144,7 +152,7 @@ void *sensor_simulation_task(void *arg) {
         if (missed) thread_stats[THREAD_SENSOR].deadline_missed++;
         pthread_mutex_unlock(&data_mutex);
 
-        usleep(80000); /* periode 80 ms */
+        sleep_until_us(next_deadline);
     }
 
     return NULL;
