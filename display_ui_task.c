@@ -354,8 +354,8 @@ void *display_ui_task(void *arg)
 
         /* ========== ORDONNANCEMENT ========== */
         printf("\n  " BOLD FG_BLUE "▸ ORDONNANCEMENT TEMPS-REEL (SCHED_FIFO)" RESET "\n");
-        printf(DIM "  %-20s %4s %10s %10s  Activite" RESET "\n",
-       "Thread", "Prio", "Exec", "Preempt");
+        printf(DIM "  %-22s  %4s  %10s  Activite" RESET "\n",
+        "Thread", "Prio", "Exec");
 
         /* Trouver le max pour normaliser les barres */
         unsigned long max_exec = 1;
@@ -410,11 +410,6 @@ void *display_ui_task(void *arg)
             printf("]" RESET "\n");
         }
         printf("]" RESET "\n");
-
-        /* Barre de préemption (rouge) */
-        printf("  %-20s      ", "");
-        print_bar(local_stats[idx].preemptions, 50.0f, 20, FG_RED);
-        printf(" %lu\n", local_stats[idx].preemptions);
 
         /* ========== PIED DE PAGE ========== */
         printf(FG_CYAN
