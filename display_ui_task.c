@@ -75,6 +75,35 @@ static void mini_bar(int filled, int width, const char *color) {
     printf("]" RESET);
 }
 
+/* Dessine le pied vu de face avec inclinaison temps-reel */
+static void draw_ascii_foot(float tilt) {
+    /* Decalage visuel selon l'inclinaison (max +-6) */
+    int offset = (int)(tilt / 4.0f);
+    if (offset > 6)  offset = 6;
+    if (offset < -6) offset = -6;
+
+    /* Couleur selon la gravite */
+    float abs_tilt = tilt < 0 ? -tilt : tilt;
+    const char *color;
+    if      (abs_tilt < 8.0f)  color = FG_GREEN;
+    else if (abs_tilt < 15.0f) color = FG_YELLOW;
+    else                       color = FG_RED;
+
+    int base = 14;
+    int s;
+
+    s = base + offset;           if (s < 2) s = 2;
+    printf("  %s%*s  |  |" RESET "\n", color, s, "");
+    s = base + (offset * 4) / 5; if (s < 2) s = 2;
+    printf("  %s%*s /    \\" RESET "\n", color, s, "");
+    s = base + (offset * 2) / 5; if (s < 2) s = 2;
+    printf("  %s%*s|      |" RESET "\n", color, s, "");
+    s = base;
+    printf("  %s%*s|______|" RESET "\n", color, s, "");
+    printf("  " DIM "%*s==========" RESET "   %s%+.1f deg" RESET "\n",
+           base - 1, "", color, tilt);
+}
+
 void *display_ui_task(void *arg)
 {
     (void)arg;
@@ -170,6 +199,12 @@ void *display_ui_task(void *arg)
         printf(" (%d/3)      ", local_actuator.vibration_level);
         printf("Buzzer             : %s\n",
                local_actuator.buzzer_on ? FG_RED BOLD "ON " RESET : DIM "OFF" RESET);
+
+        printf(DIM "\n  ──────────────────────────────────────────────────────────" RESET "\n");
+
+        /* ====== VISUALISATION PIED (temps reel) ====== */
+        printf("\n  " BOLD FG_BLUE "▸ VISUALISATION PIED (temps reel)" RESET "\n\n");
+        draw_ascii_foot(local_sensor.tilt);
 
         printf(DIM "\n  ──────────────────────────────────────────────────────────" RESET "\n");
 
