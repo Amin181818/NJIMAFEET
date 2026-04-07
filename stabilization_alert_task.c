@@ -33,10 +33,13 @@ void *stabilization_alert_task(void *arg)
         printf("[stabilization] SCHED_FIFO prio=%d\n", param.sched_priority);
     }
 
+    long next_deadline = 0;
+
     while (system_running)
     {
         /* Debut : on note l'heure */
         long t0 = monotonic_us();
+        if (next_deadline == 0) next_deadline = t0 + 35000L;
 
         pthread_mutex_lock(&data_mutex);
         thread_stats[THREAD_STAB_ALERT].is_running = 1;
@@ -107,15 +110,18 @@ void *stabilization_alert_task(void *arg)
         pthread_mutex_unlock(&data_mutex);
 
         /* Fin : on calcule la duree et on met a jour les stats */
-        long dur = monotonic_us() - t0;
+        long t1 = monotonic_us();
+        long dur = t1 - t0;
+        int missed = (t1 > next_deadline) ? 1 : 0;
+        next_deadline += 35000L;
+
         pthread_mutex_lock(&data_mutex);
         thread_stats[THREAD_STAB_ALERT].is_running    = 0;
         thread_stats[THREAD_STAB_ALERT].exec_count++;
         thread_stats[THREAD_STAB_ALERT].last_exec_us  = dur;
         if (dur > thread_stats[THREAD_STAB_ALERT].max_exec_us)
             thread_stats[THREAD_STAB_ALERT].max_exec_us = dur;
-        if (dur > thread_stats[THREAD_STAB_ALERT].period_ms * 1000L)
-            thread_stats[THREAD_STAB_ALERT].deadline_missed++;
+        if (missed) thread_stats[THREAD_STAB_ALERT].deadline_missed++;
         pthread_mutex_unlock(&data_mutex);
 
         usleep(35000); /* periode 35 ms */

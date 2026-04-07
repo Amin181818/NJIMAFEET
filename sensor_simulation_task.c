@@ -108,10 +108,12 @@ void *sensor_simulation_task(void *arg) {
     srand((unsigned int)time(NULL));
     int scenario = 0;
     int counter  = 0;
+    long next_deadline = 0;
 
     while (system_running) {
         /* Debut : on note l'heure */
         long t0 = monotonic_us();
+        if (next_deadline == 0) next_deadline = t0 + 80000L;
 
         pthread_mutex_lock(&data_mutex);
         thread_stats[THREAD_SENSOR].is_running = 1;
@@ -128,15 +130,18 @@ void *sensor_simulation_task(void *arg) {
         counter++;
 
         /* Fin : on calcule la duree et on met a jour les stats */
-        long dur = monotonic_us() - t0;
+        long t1 = monotonic_us();
+        long dur = t1 - t0;
+        int missed = (t1 > next_deadline) ? 1 : 0;
+        next_deadline += 80000L;
+
         pthread_mutex_lock(&data_mutex);
         thread_stats[THREAD_SENSOR].is_running    = 0;
         thread_stats[THREAD_SENSOR].exec_count++;
         thread_stats[THREAD_SENSOR].last_exec_us  = dur;
         if (dur > thread_stats[THREAD_SENSOR].max_exec_us)
             thread_stats[THREAD_SENSOR].max_exec_us = dur;
-        if (dur > thread_stats[THREAD_SENSOR].period_ms * 1000L)
-            thread_stats[THREAD_SENSOR].deadline_missed++;
+        if (missed) thread_stats[THREAD_SENSOR].deadline_missed++;
         pthread_mutex_unlock(&data_mutex);
 
         usleep(80000); /* periode 80 ms */

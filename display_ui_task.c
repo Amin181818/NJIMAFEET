@@ -91,10 +91,13 @@ void *display_ui_task(void *arg)
 
     printf(HIDE_CURSOR);
 
+    long next_deadline = 0;
+
     while (system_running)
     {
         /* Debut : on note l'heure */
         long t0 = monotonic_us();
+        if (next_deadline == 0) next_deadline = t0 + 200000L;
 
         pthread_mutex_lock(&data_mutex);
         thread_stats[THREAD_DISPLAY].is_running = 1;
@@ -119,29 +122,44 @@ void *display_ui_task(void *arg)
         printf(CLEAR_SCREEN);
 
         /* ====== TITRE ====== */
-        printf(BOLD FG_CYAN "  ╔════════ SAFEFEET BY NJIMA ════════╗" RESET);
-        printf("   Etat : %s %s " RESET, fall_state_color(local_fall), fall_state_text(local_fall));
-        printf("  LED : %s\n", led_str(local_actuator.led_state));
+        printf("\n");
+        printf(BOLD FG_CYAN
+               "  ╔══════════════════════════════════════════════════════════╗\n"
+               "  ║                    SAFEFEET BY NJIMA                     ║\n"
+               "  ╚══════════════════════════════════════════════════════════╝\n"
+               RESET);
+
+        /* ====== ETAT + LED ====== */
+        printf("\n  " BOLD FG_BLUE "▸ ETAT SYSTEME" RESET "     ");
+        printf("%s %s " RESET, fall_state_color(local_fall), fall_state_text(local_fall));
+        printf("     LED : %s\n", led_str(local_actuator.led_state));
+
+        printf(DIM "  ──────────────────────────────────────────────────────────" RESET "\n");
 
         /* ====== CAPTEURS + TERRAIN sur 2 colonnes ====== */
-        printf(BOLD FG_BLUE "  ▸ CAPTEURS" RESET "                          " BOLD FG_BLUE "▸ TERRAIN" RESET "\n");
-        printf("   Accel  : %5.2f   Tilt   : %6.1f deg    Trou      : %s\n",
+        printf("\n  " BOLD FG_BLUE "▸ CAPTEURS" RESET "                             "
+                    BOLD FG_BLUE "▸ TERRAIN" RESET "\n");
+        printf("   Accel  : %5.2f      Tilt   : %6.1f deg      Trou      : %s\n",
                local_sensor.accel, local_sensor.tilt,
                local_map.hole_detected ? FG_RED "OUI" RESET : FG_GREEN "NON" RESET);
-        printf("   Gyro   : %5.2f   Depth  : %6.2f m      Obstacle  : %s\n",
+        printf("   Gyro   : %5.2f      Depth  : %6.2f m        Obstacle  : %s\n",
                local_sensor.gyro, local_sensor.depth,
                local_map.obstacle_detected ? FG_RED "OUI" RESET : FG_GREEN "NON" RESET);
-        printf("   PressG : %5.1f   PressD : %5.1f         Glissant  : %s\n",
+        printf("   PressG : %5.1f %%    PressD : %5.1f %%         Glissant  : %s\n",
                local_sensor.pressure_left, local_sensor.pressure_right,
                local_map.slippery_surface ? FG_RED "OUI" RESET : FG_GREEN "NON" RESET);
-        printf("   Pente  : %5.1f deg                       Risque    : %d\n",
+        printf("   Pente  : %5.1f deg                           Risque    : %d/10\n",
                local_map.terrain_slope, local_map.terrain_risk_level);
 
-        /* ====== ACTIONNEURS sur une ligne ====== */
-        printf(BOLD FG_BLUE "  ▸ ACTIONNEURS  " RESET);
-        printf("Stab:%s  ", local_actuator.stabilization_on ? FG_YELLOW "ON " RESET : DIM "OFF" RESET);
-        printf("Cheville:%s  ", local_actuator.ankle_lock_on ? FG_YELLOW "ON " RESET : DIM "OFF" RESET);
-        printf("Vibr:");
+        printf(DIM "\n  ──────────────────────────────────────────────────────────" RESET "\n");
+
+        /* ====== ACTIONNEURS ====== */
+        printf("\n  " BOLD FG_BLUE "▸ ACTIONNEURS" RESET "\n");
+        printf("   Stabilisation  : %s      ",
+               local_actuator.stabilization_on ? FG_YELLOW BOLD "ON " RESET : DIM "OFF" RESET);
+        printf("Verrouil. cheville : %s\n",
+               local_actuator.ankle_lock_on ? FG_YELLOW BOLD "ON " RESET : DIM "OFF" RESET);
+        printf("   Vibration      : ");
         for (int i = 0; i < 3; i++) {
             if (i < local_actuator.vibration_level) {
                 if (i == 0) printf(FG_GREEN "▮" RESET);
@@ -149,11 +167,15 @@ void *display_ui_task(void *arg)
                 else printf(FG_RED "▮" RESET);
             } else printf(DIM "▯" RESET);
         }
-        printf("  Buzzer:%s\n", local_actuator.buzzer_on ? FG_RED BOLD "ON " RESET : DIM "OFF" RESET);
+        printf(" (%d/3)      ", local_actuator.vibration_level);
+        printf("Buzzer             : %s\n",
+               local_actuator.buzzer_on ? FG_RED BOLD "ON " RESET : DIM "OFF" RESET);
+
+        printf(DIM "\n  ──────────────────────────────────────────────────────────" RESET "\n");
 
         /* ====== ORDONNANCEMENT ====== */
-        printf(BOLD FG_BLUE "  ▸ ORDONNANCEMENT TEMPS-REEL (SCHED_FIFO)" RESET "\n");
-        printf(DIM "  %-18s %3s %4s %8s %6s %6s %3s %4s  Activite" RESET "\n",
+        printf("\n  " BOLD FG_BLUE "▸ ORDONNANCEMENT TEMPS-REEL (SCHED_FIFO)" RESET "\n\n");
+        printf(DIM "  %-18s %3s %5s %8s %7s %7s %3s %5s  Activite" RESET "\n",
                "Thread", "Pri", "Per", "Exec", "Last", "Max", "DL", "Etat");
 
         /* Trouver le max pour normaliser les barres */
@@ -191,34 +213,35 @@ void *display_ui_task(void *arg)
                 ? FG_GREEN BOLD "RUN " RESET
                 : DIM      "idle" RESET;
 
-            /* Last et Max en ms (avec 1 decimale) */
-            float last_ms = t->last_exec_us / 1000.0f;
-            float max_ms  = t->max_exec_us  / 1000.0f;
-
-            /* Barre proportionnelle (12 chars) */
-            int bar_len = (int)((t->exec_count * 12) / max_exec);
+            /* Barre proportionnelle (16 chars) */
+            int bar_len = (int)((t->exec_count * 16) / max_exec);
             if (bar_len < 0) bar_len = 0;
-            if (bar_len > 12) bar_len = 12;
+            if (bar_len > 16) bar_len = 16;
 
-            printf("  %s%-18s %3d %3dms %8lu %5.1fm %5.1fm %3lu" RESET " %s ",
+            printf("  %s%-18s %3d %3dms %8lu %5ldus %5ldus %3lu" RESET " %s ",
                    color, t->name, t->priority, t->period_ms,
-                   t->exec_count, last_ms, max_ms, t->deadline_missed, etat);
-            mini_bar(bar_len, 12, color);
+                   t->exec_count, t->last_exec_us, t->max_exec_us,
+                   t->deadline_missed, etat);
+            mini_bar(bar_len, 16, color);
             printf("\n");
         }
 
+        printf(DIM "\n  ──────────────────────────────────────────────────────────" RESET "\n");
         printf(DIM "  Ctrl+C pour quitter  |  sudo ./safefeet pour les priorites RT" RESET "\n");
 
         /* Fin : on calcule la duree et on met a jour les stats */
-        long dur = monotonic_us() - t0;
+        long t1 = monotonic_us();
+        long dur = t1 - t0;
+        int missed = (t1 > next_deadline) ? 1 : 0;
+        next_deadline += 200000L;
+
         pthread_mutex_lock(&data_mutex);
         thread_stats[THREAD_DISPLAY].is_running    = 0;
         thread_stats[THREAD_DISPLAY].exec_count++;
         thread_stats[THREAD_DISPLAY].last_exec_us  = dur;
         if (dur > thread_stats[THREAD_DISPLAY].max_exec_us)
             thread_stats[THREAD_DISPLAY].max_exec_us = dur;
-        if (dur > thread_stats[THREAD_DISPLAY].period_ms * 1000L)
-            thread_stats[THREAD_DISPLAY].deadline_missed++;
+        if (missed) thread_stats[THREAD_DISPLAY].deadline_missed++;
         pthread_mutex_unlock(&data_mutex);
 
         fflush(stdout);
